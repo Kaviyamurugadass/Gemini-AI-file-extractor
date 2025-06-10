@@ -31,11 +31,8 @@ def main():
         print("Error: Only PDF files are supported")
         return
 
-    # Gemini API key
-    GEMINI_API_KEY = "AIzaSyA9l0lgZPm8OCYvGsCAvzeqdCwdAAy4sWk"
-
     # Configure the API key
-    genai.configure(api_key=GEMINI_API_KEY)
+    genai.configure(api_key=Settings.GEMINI_API_KEY)
 
     # 1. Upload the file with explicit MIME type
     uploaded_file = genai.upload_file(
