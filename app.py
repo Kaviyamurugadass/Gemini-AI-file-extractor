@@ -13,7 +13,7 @@ GEMINI_API_KEY = "AIzaSyA9l0lgZPm8OCYvGsCAvzeqdCwdAAy4sWk"
 genai.configure(api_key=GEMINI_API_KEY)
 
 # Path to your file (e.g., pdf)
-file_path = "C:\\Users\\Kaviya\\Downloads\\Overcoming Imperfect of RAG.pdf"
+file_path = "C:\\Users\\Kaviya\\Downloads\\kbi_quick_start_guide_june23.pdf"
 
 # 1. Upload the file with explicit MIME type
 uploaded_file = genai.upload_file(
@@ -24,7 +24,17 @@ uploaded_file = genai.upload_file(
 
 # 2. Use the file in a prompt
 model = genai.GenerativeModel("gemini-1.5-flash")  
-prompt = "Can you generate a markdown of this document"
+prompt = (
+    "You will be given extracted content from a file. Convert it into clean, logically organized Markdown. "
+    "Use proper Markdown syntax for:\n"
+    "- Headings (for titles or slide headers)\n"
+    "- Bullet points (for lists)\n"
+    "- Tables (for tabular data)\n"
+    "- Blockquotes (for quotations)\n"
+    "- Inline images (use given base64)\n\n"
+    "Avoid repetition. Maintain original structure and flow, but present it clearly and concisely. "
+    "Here is the content:\n\n"
+)
 response = model.generate_content([uploaded_file, prompt])
 
 # 3. Print the response
