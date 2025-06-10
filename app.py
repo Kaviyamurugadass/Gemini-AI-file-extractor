@@ -14,13 +14,14 @@ from io import BytesIO
 import re
 
 def extract_images_from_pdf(pdf_path):
-    """Extract images from PDF and convert to base64"""
-    images = []
+    """Extract images from PDF and convert to base64, maintaining their positions"""
+    images_by_page = {}  # Dictionary to store images by page number
     doc = fitz.open(pdf_path)
     
     for page_num in range(len(doc)):
         page = doc[page_num]
         image_list = page.get_images()
+        page_images = []
         
         for img_index, img in enumerate(image_list):
             xref = img[0]
@@ -31,12 +32,28 @@ def extract_images_from_pdf(pdf_path):
             image_base64 = base64.b64encode(image_bytes).decode('utf-8')
             image_ext = base_image["ext"]
             
-            # Create markdown image tag
-            image_markdown = f"\n![Image from page {page_num + 1}](data:image/{image_ext};base64,{image_base64})\n"
-            images.append(image_markdown)
+            # Store image with its position information
+            page_images.append({
+                'index': img_index,
+                'page': page_num + 1,
+                'base64': image_base64,
+                'ext': image_ext
+            })
+        
+        if page_images:
+            images_by_page[page_num] = page_images
     
     doc.close()
-    return images
+    return images_by_page
+
+def replace_image_placeholders(content, images_by_page):
+    """Replace image placeholders with actual image markdown"""
+    for page_num, images in images_by_page.items():
+        for img in images:
+            placeholder = f"[IMAGE_{img['page']}_{img['index']}]"
+            image_markdown = f"![Image from page {img['page']}](data:image/{img['ext']};base64,{img['base64']})"
+            content = content.replace(placeholder, image_markdown)
+    return content
 
 def main():
     # Create and hide the root window
@@ -62,8 +79,9 @@ def main():
 
     # Extract images from PDF
     print("Extracting images from PDF...")
-    images = extract_images_from_pdf(file_path)
-    print(f"Found {len(images)} images in the PDF")
+    images_by_page = extract_images_from_pdf(file_path)
+    total_images = sum(len(images) for images in images_by_page.values())
+    # print(f"Found {total_images} images in the PDF")
 
     # Configure the API key
     genai.configure(api_key=Settings.GEMINI_API_KEY)
@@ -76,26 +94,34 @@ def main():
 
     # 2. Use the file in a prompt
     model = genai.GenerativeModel("gemini-1.5-flash")  
+    
+    # Create image placeholders for the prompt
+    image_placeholders = []
+    for page_num, images in images_by_page.items():
+        for img in images:
+            image_placeholders.append(
+                f"[IMAGE_{img['page']}_{img['index']}]"
+            )
+
     prompt = (
         "You will be given extracted content from a file. Convert it into clean, logically organized Markdown. "
         "Use proper Markdown syntax for:\n"
         "- Headings (for titles or slide headers)\n"
         "- Bullet points (for lists)\n"
         "- Tables (for tabular data)\n"
-        "- Blockquotes (for quotations)\n"
-        "- Inline images (use given base64)\n\n"
-        "Avoid repetition. Maintain original structure and flow, but present it clearly and concisely. "
+        "- Blockquotes (for quotations)\n\n"
+        "IMPORTANT: The document contains images. Use the following image placeholders in your markdown "
+        "exactly where they should appear in the document:\n\n"
+        f"{chr(10).join(image_placeholders)}\n\n"
+        "Maintain the exact structure and flow of the original document. "
+        "Place the images exactly where they appear in the original document. "
         "Here is the content:\n\n"
     )
+    
     response = model.generate_content([uploaded_file, prompt])
 
-    # Combine markdown content with images
-    markdown_content = response.text
-    if images:
-        # Insert images at appropriate positions in the markdown
-        # You might want to adjust this logic based on your needs
-        markdown_content += "\n\n## Images from the Document\n"
-        markdown_content += "".join(images)
+    # Replace image placeholders with actual images
+    markdown_content = replace_image_placeholders(response.text, images_by_page)
 
     # 3. Print the response
     print(markdown_content)
@@ -159,7 +185,7 @@ def main():
 
     variables = {
         "title": page_title,
-        "content": markdown_content,  # Use the combined content with images
+        "content": markdown_content,  # Use the content with replaced images
         "path": page_path,
         "description": f"Auto-generated content from {file_name}",
         "editor": "markdown",
