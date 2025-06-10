@@ -8,6 +8,35 @@ import json
 import os
 import tkinter as tk  # Import tkinter for file dialog
 from tkinter import filedialog # Import filedialog for file selection
+import fitz  # PyMuPDF for PDF processing
+import base64
+from io import BytesIO
+import re
+
+def extract_images_from_pdf(pdf_path):
+    """Extract images from PDF and convert to base64"""
+    images = []
+    doc = fitz.open(pdf_path)
+    
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+        image_list = page.get_images()
+        
+        for img_index, img in enumerate(image_list):
+            xref = img[0]
+            base_image = doc.extract_image(xref)
+            image_bytes = base_image["image"]
+            
+            # Convert to base64
+            image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+            image_ext = base_image["ext"]
+            
+            # Create markdown image tag
+            image_markdown = f"\n![Image from page {page_num + 1}](data:image/{image_ext};base64,{image_base64})\n"
+            images.append(image_markdown)
+    
+    doc.close()
+    return images
 
 def main():
     # Create and hide the root window
@@ -30,6 +59,11 @@ def main():
     if not file_path.lower().endswith('.pdf'):
         print("Error: Only PDF files are supported")
         return
+
+    # Extract images from PDF
+    print("Extracting images from PDF...")
+    images = extract_images_from_pdf(file_path)
+    print(f"Found {len(images)} images in the PDF")
 
     # Configure the API key
     genai.configure(api_key=Settings.GEMINI_API_KEY)
@@ -55,8 +89,16 @@ def main():
     )
     response = model.generate_content([uploaded_file, prompt])
 
+    # Combine markdown content with images
+    markdown_content = response.text
+    if images:
+        # Insert images at appropriate positions in the markdown
+        # You might want to adjust this logic based on your needs
+        markdown_content += "\n\n## Images from the Document\n"
+        markdown_content += "".join(images)
+
     # 3. Print the response
-    print(response.text)
+    print(markdown_content)
 
     # 4. Upload to Wiki.js
     wiki_js_url = Settings.WIKI_JS_URL.rstrip('/')  # Remove trailing slash
@@ -117,7 +159,7 @@ def main():
 
     variables = {
         "title": page_title,
-        "content": response.text,
+        "content": markdown_content,  # Use the combined content with images
         "path": page_path,
         "description": f"Auto-generated content from {file_name}",
         "editor": "markdown",
